@@ -1,0 +1,173 @@
+struct in_addr { 
+    in_addr_t s_addr; /* 32-bit IPv4 address */
+                      /* network byte ordered */
+};
+
+struct sockaddr_in {
+    uint8_t sin_len;          /* length of structure (16) */
+    sa_family_t sin_family;   /* AF_INET */
+    in_port_t sin_port;       /* 16-bit TCP or UDP port number */
+                              /* network byte ordered */
+    struct in_addr sin_addr;  /* 32-bit IPv4 address */
+                              /* network byte ordered */
+    char sin_zero[8];         /* unused */
+};
+
+struct sockaddr {
+    uint8_t sa_len;
+    sa_family_t sa_family; /* address family: AF_xxx value */ 
+    char sa_data[14]; /* protocol-specific address */
+};
+
+struct in6_addr {
+    uint8_t s6_addr[16];    /* 128-bit IPv6 address */
+                            /* network byte ordered */
+};
+
+#define SIN6_LEN /* required for compile-time tests */
+
+struct sockaddr_in6 {
+    uint8_t sin6_len; /* length of this struct (28) */
+  sa_family_t sin6_family; /* AF_INET6 */
+  in_port_t sin6_port; /* transport layer port# */
+                       /* network byte ordered */
+
+    uint32_t sin6_flowinfo; 
+    struct in6_addr sin6_addr; /* IPv6 address */
+                               /* network byte ordered */
+    uint32_t sin6_scope_id; /* set of interfaces for a scope */
+};
+
+struct sockaddr_storage {
+  uint8_t ss_len; /* length of this struct (implementation dependent) */
+  sa_family_t ss_family; /* address family: AF_xxx value */ 
+  /* implementation-dependent elements to provide:
+   * a) alignment sufficient to fulfill the alignment requirements of * all socket address types that the system supports.
+   * b) enough storage to hold any type of socket address that the
+   * system supports.
+   */ 
+}; 
+
+
+#include <netinet/in.h>
+uint16_t htons(uint16_t host16bitvalue) ; 
+uint32_t htonl(uint32_t host32bitvalue) ; //Both return: value in network byte order 
+uint16_t ntohs(uint16_t net16bitvalue) ;
+uint32_t ntohl(uint32_t net32bitvalue) ;  //Both return: value in host byte order
+
+#include <strings.h>
+void bzero(void *dest, size_t nbytes);
+void bcopy(const void *src, void *dest, size_t nbytes);
+int bcmp(const void *ptr1, const void *ptr2, size_t nbytes);
+
+
+ 
+ 
+#include <string.h>
+void *memset(void *dest, int c, size_t len);
+void *memcpy(void *dest, const void *src, size_t nbytes);
+int memcmp(const void *ptr1, const void *ptr2, size_t nbytes);
+                                                     //Returns: 0 if equal, <0 or >0 if unequal (see text)
+
+#include <arpa/inet.h>
+int inet_aton(const char *strptr, struct in_addr *addrptr); // Returns: 1 if string was valid, 0 on error
+in_addr_t inet_addr(const char *strptr); // Returns: 32-bit binary network byte ordered IPv4 address; INADDR_NONE if error
+char *inet_ntoa(struct in_addr inaddr); //Returns: pointer to dotted-decimal string
+
+
+#include <arpa/inet.h>
+int inet_pton(int family, const char *strptr, void *addrptr);
+    // Returns: 1 if OK, 0 if input not a valid presentation format, -1 on error
+const char *inet_ntop(int family, const void *addrptr, char *strptr, size_t len);
+    // Returns: pointer to result if OK, NULL on error
+
+#define INET_ADDRSTRLEN 16 /* for IPv4 dotted-decimal */ 
+#define INET6_ADDRSTRLEN 46 /* for IPv6 hex string */
+
+
+#include <unistd.h>
+pid_t fork(void);  // Returns: 0 in child, process ID of child in parent, -1 on error
+
+#include <unistd.h>
+int execl (const char *pathname, const char *arg0, ... /* (char *) 0 */ );
+int execv (const char *pathname, char *const argv[]); 
+int execle (const char *pathname, const char *arg0, ... /* (char *) 0, char *const envp[] */ );
+int execve (const char *pathname, char *const argv[], char *const envp[]); 
+int execlp (const char *filename, const char *arg0, ... /* (char *) 0 */ ); 
+int execvp (const char *filename, char *const argv[]);
+  // All six return: -1 on error, no return on success
+
+
+#include <sys/socket.h>
+int getsockname(int sockfd, struct sockaddr *localaddr, socklen_t *addrlen);
+int getpeername(int sockfd, struct sockaddr *peeraddr, socklen_t *addrlen);
+      // Both return: 0 if OK, -1 on error
+
+当服务器close一个连接时，若client端接着发数据。根据TCP协议的规定，会收到一个RST响应，
+client再往这个服务器发送数据时，系统会发出一个SIGPIPE信号给进程，告诉进程这个连接已经断开了，不要再写了。
+
+为了避免进程退出, 可以捕获SIGPIPE信号, 或者忽略它, 给它设置SIG_IGN信号处理函数:signal(SIGPIPE, SIG_IGN);
+这样, 第二次调用write方法时, 会返回-1, 同时errno置为SIGPIPE. 程序便能知道对端已经关闭.
+
+SIGCHLD的产生条件
+1、子进程终止时
+2、子进程接收到SIGSTOP信号停止时
+3、子进程处在停止态，接受到SIGCONT后唤醒时
+
+select、poll、epoll简介
+epoll跟select都能提供多路I/O复用的解决方案。在现在的Linux内核里有都能够支持，其中epoll是Linux所特有，而select则应该是POSIX所规定，一般操作系统均有实现
+select：
+select本质上是通过设置或者检查存放fd标志位的数据结构来进行下一步处理。这样所带来的缺点是：
+1、 单个进程可监视的fd数量被限制，即能监听端口的大小有限。
+      一般来说这个数目和系统内存关系很大，具体数目可以cat /proc/sys/fs/file-max察看。32位机默认是1024个。64位机默认是2048.
+2、 对socket进行扫描时是线性扫描，即采用轮询的方法，效率较低：
+       当套接字比较多的时候，每次select()都要通过遍历FD_SETSIZE个Socket来完成调度,不管哪个Socket是活跃的,都遍历一遍。这会浪费很多CPU时间。如果能给套接字注册某个回调函数，当他们活跃时，自动完成相关操作，那就避免了轮询，这正是epoll与kqueue做的。
+3、需要维护一个用来存放大量fd的数据结构，这样会使得用户空间和内核空间在传递该结构时复制开销大
+
+poll：
+poll本质上和select没有区别，它将用户传入的数组拷贝到内核空间，然后查询每个fd对应的设备状态，如果设备就绪则在设备等待队列中加入一项并继续遍历，如果遍历完所有fd后没有发现就绪设备，则挂起当前进程，直到设备就绪或者主动超时，被唤醒后它又要再次遍历fd。这个过程经历了多次无谓的遍历。
+它没有最大连接数的限制，原因是它是基于链表来存储的，但是同样有一个缺点：
+
+1、大量的fd的数组被整体复制于用户态和内核地址空间之间，而不管这样的复制是不是有意义。                   
+2、poll还有一个特点是“水平触发”，如果报告了fd后，没有被处理，那么下次poll时会再次报告该fd。
+
+epoll:
+epoll有EPOLLLT和EPOLLET两种触发模式，LT是默认的模式，ET是“高速”模式。LT模式下，只要这个fd还有数据可读，每次 epoll_wait都会返回它的事件，提醒用户程序去操作，而在ET（边缘触发）模式中，它只会提示一次，直到下次再有数据流入之前都不会再提示了，无 论fd中是否还有数据可读。所以在ET模式下，read一个fd的时候一定要把它的buffer读光，也就是说一直读到read的返回值小于请求值，或者 遇到EAGAIN错误。还有一个特点是，epoll使用“事件”的就绪通知方式，通过epoll_ctl注册fd，一旦该fd就绪，内核就会采用类似callback的回调机制来激活该fd，epoll_wait便可以收到通知。
+epoll为什么要有EPOLLET触发模式？
+
+如果采用EPOLLLT模式的话，系统中一旦有大量你不需要读写的就绪文件描述符，它们每次调用epoll_wait都会返回，这样会大大降低处理程序检索自己关心的就绪文件描述符的效率.。而采用EPOLLET这种边沿触发模式的话，当被监控的文件描述符上有可读写事件发生时，epoll_wait()会通知处理程序去读写。如果这次没有把数据全部读写完(如读写缓冲区太小)，那么下次调用epoll_wait()时，它不会通知你，也就是它只会通知你一次，直到该文件描述符上出现第二次可读写事件才会通知你！！！这种模式比水平触发效率高，系统不会充斥大量你不关心的就绪文件描述符
+epoll的优点：
+
+1、没有最大并发连接的限制，能打开的FD的上限远大于1024（1G的内存上能监听约10万个端口）；
+2、效率提升，不是轮询的方式，不会随着FD数目的增加效率下降。只有活跃可用的FD才会调用callback函数；
+即Epoll最大的优点就在于它只管你“活跃”的连接，而跟连接总数无关，因此在实际的网络环境中，Epoll的效率就会远远高于select和poll。
+3、 内存拷贝，利用mmap()文件映射内存加速与内核空间的消息传递；即epoll使用mmap减少复制开销。
+select、poll、epoll 区别总结：
+
+1、支持一个进程所能打开的最大连接数
+select
+单个进程所能打开的最大连接数有FD_SETSIZE宏定义，其大小是32个整数的大小（在32位的机器上，大小就是3232，同理64位机器上FD_SETSIZE为3264），当然我们可以对进行修改，然后重新编译内核，但是性能可能会受到影响，这需要进一步的测试。
+poll
+poll本质上和select没有区别，但是它没有最大连接数的限制，原因是它是基于链表来存储的
+epoll
+虽然连接数有上限，但是很大，1G内存的机器上可以打开10万左右的连接，2G内存的机器可以打开20万左右的连接
+2、FD剧增后带来的IO效率问题
+select
+因为每次调用时都会对连接进行线性遍历，所以随着FD的增加会造成遍历速度慢的“线性下降性能问题”。
+poll
+同上
+epoll
+因为epoll内核中实现是根据每个fd上的callback函数来实现的，只有活跃的socket才会主动调用callback，所以在活跃socket较少的情况下，使用epoll没有前面两者的线性下降的性能问题，但是所有socket都很活跃的情况下，可能会有性能问题。
+3、 消息传递方式
+select
+内核需要将消息传递到用户空间，都需要内核拷贝动作
+poll
+同上
+epoll
+epoll通过内核和用户空间共享一块内存来实现的。
+总结：
+
+综上，在选择select，poll，epoll时要根据具体的使用场合以及这三种方式的自身特点。
+1、表面上看epoll的性能最好，但是在连接数少并且连接都十分活跃的情况下，select和poll的性能可能比epoll好，毕竟epoll的通知机制需要很多函数回调。
+2、select低效是因为每次它都需要轮询。但低效也是相对的，视情况而定，也可通过良好的设计改善
+
