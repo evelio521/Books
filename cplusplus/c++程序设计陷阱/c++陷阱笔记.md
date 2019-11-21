@@ -854,3 +854,1043 @@ void BeepDecorator::send() {
 }
 ```
 
+#### 陷阱72 Template Method过于灵活
+
+```c++ 
+class Base {
+  public:
+   void algorithm();
+  protected:
+   virtual bool hook1()  const;
+   virtual bool hook2()  = 0;
+};
+
+void Base::algorithm() {
+  if (hook1()) { // 调用派生类中被覆盖的受保护的虚拟函数
+    hook2()
+  }
+}
+
+
+// 下面的设计就过于随意化，模板类方法不应该声明为虚拟的
+class Base {
+  public:
+   virtual ~Base();
+   virtual bool verify() const = 0; // 子类必须实现，这个设计并不好
+   virtual void doit();
+   long id() const;
+   void jump();
+  protected:
+   virtual double howHigh() const;
+   virtual double howMayTimes() const = 0;
+};
+```
+
+#### 陷阱73 重载虚拟函数
+
+```c++
+class Thing {
+  public:
+   virtual void update(int);
+   virtual void update(float);
+};
+
+class MyThing: public Thing {
+  public:
+    void update(int);
+};
+
+MyThing *mt = new MyThing;
+Thing *t = mt;
+t->update(12.3);// ok base
+mt->update(12.3);// oops derived!
+
+// 对上面改进，不要重载虚拟函数
+class Thing {
+  public:
+    void update(int);
+    void update(float);
+  protected:
+    virtual void updateInt(int);
+    virtual void updateFloat(float);
+};
+
+inline void Thing::update(int a) {
+  updateInt(a);
+}
+inline void Thing::update(float a) {
+  updateFloat(a);
+}
+```
+
+#### 陷阱74 带有默认参数初始值的虚拟函数
+
+```c++
+class Thing {
+  public:
+   virtual void doitNTimes(int numTimes = 12);
+};
+
+class MyThing : public Thing {
+  // 默认构造函数具有传递性（静态应用），这个10没有起作用，仍然是12次
+  void doitNTimes(int numTimes = 10);
+};
+
+// 代码改进
+class Thing {
+  void doitNTimes(int numTimes = 12) {
+    doitNTimesImpl(numTimes);
+  }
+  protected:
+  virtual void doitNTimesImpl(int numTimes);
+};
+```
+
+#### 陷阱75  在构造函数和析构函数中调用虚拟函数
+
+> 1. 在构造函数和析构函数中，禁止调用虚拟函数（具体原因P235）
+> 2. 不要再析构函数中抛出异常
+
+```c++
+// 下面的方法是比较好的实现方法
+class B {
+  public:
+   B() {}
+   virtual ~B() {}
+};
+
+class D : public B {
+  public:
+   D() {}
+   ~D() {}
+};
+
+D x;
+```
+
+#### 陷阱76 虚拟赋值
+
+```c++
+// 虚拟赋值是允许的，但是找不到这么做的理由
+template <typename T>
+class Container {
+  public:
+   virtual Container &operator=(const T &) = 0;
+};
+
+template <typename T>
+class List : public Container<T> {
+  List &operator= (const T&);
+};
+template <typename T>
+class Array : public Container<T> {
+  Array &operator= (const T&);
+};
+
+Container<int> &c(getCurrentContainer());
+c = 12; // is the meaning clear?
+
+// 使用非歧义的非运算符函数
+template <typename T>
+class Container {
+  public:
+   virtual voidsetAll(const T &) = 0;
+};
+
+Container<int> &c(getCurrentContainer());
+c = 12; //  meaning is clear
+
+
+// Prototype模式
+template <typename T>
+class Container {
+  public:
+   virtual Container *clone() = 0;
+};
+
+template <typename T>
+class List : public Container<T> {
+  List(const List&);
+  List *clone () const {return new List(*this);}
+};
+template <typename T>
+class Array : public Container<T> {
+  Array(const List&);
+  Array *clone () const {return new Array(*this);}
+};
+
+Container<int> *cp = getCurrentContainer();
+Container<int> *cp2 = cp->clone();
+```
+
+#### 陷阱77 没有区分重载、覆盖和隐藏
+
+> 1. 只能在存在基类虚拟函数的情况下出现覆盖。
+> 2. 覆盖和重载没有任何关系
+> 3. 不能覆盖，只能隐藏非虚拟基类函数
+
+```c++
+class Processor {
+  public:
+   virtual ~Processor();
+   bool process(Credit&);
+   bool process(Acceptance&);
+   bool process(OrderForm*);
+};
+
+
+class MyProcessor : public Processor {
+  public:
+   bool process(Rejection&); // 隐藏了基类的process
+};
+
+class MyProcessor : public Processor {
+  public:
+   using  Processor::process; // 引入基类的process
+   bool process(Rejection&); // 隐藏了基类的process
+};
+
+
+class Doer {
+  public:
+   virtual ~Doer();
+   bool doit(Credit&);
+   virtual bool doit(Acceptance&);
+   virtual bool doit(OrderForm&);
+   virtual bool doit(Rejcetion&);
+};
+
+class MYDoer : public Doer {
+  private:
+   bool doit(Credit&);// 隐藏了基类的4个函数
+   bool doit(Acceptance&); // 覆盖了对应基类的函数
+   virtual bool doit(Rejcetion&) const;// 没有覆盖，新的函数
+   double doit(OrderForm&);// error 和基类对应函数返回值不一致
+};
+```
+
+```c++
+class Vistor {
+  public:
+   virtual void visit(Acceptance&);
+   virtual void visit(Credit&);
+   virtual void visit(OrderForm&);
+   virtual int numHits();
+};
+
+class ValidVisitor : public Visitor {
+  void visit(Acceptance&);//覆盖
+  void visit(Credit&);//覆盖
+  int numHits(int);//非虚函数
+};
+
+class MyValidVisitor : public ValidVisitor {
+  void visit(Acceptance&);//覆盖
+  void visit(Credit&);//覆盖
+  int numHits(int);//虚函数 覆盖Visitor::numHits
+};
+```
+
+
+
+#### 陷阱78 错误理解虚拟函数和覆盖
+
+> 1. 彻底理解虚函数表，特别是多继承的虚函数表。
+
+#### 陷阱79 支配问题
+
+> 1. 钻石继承问题，可以利用虚继承解决。
+> 2. 虚继承不会产生歧义。
+
+```c++
+＃include<iostream>
+using namespace std;
+class A {};
+class B:virtual public A {};
+class C:public virtual A {};
+```
+
+#### 陷阱80 Get/Se接口
+
+> 1. 一个类中，不应该只是Get/Set的组合，要明确给出类的实际操作
+> 2. Get/Set接口设计可以使用下面的代码的方法。
+
+```c++
+class C {
+ public:
+  int getValue() const {
+    return value_;
+  }
+  void setValue(int value) {
+    value_ = value;
+  }
+ private:
+  int value_;
+};
+```
+
+#### 陷阱81 定常和引用数据成员
+
+> 1. 类中几乎没有必要生成定常或者引用数据成员，定常或者引用数据成员会增加维护的难度。
+
+```c++
+// 简单的类，包含定常和应用数据成员
+class C {
+  public:
+   c();
+  private:
+  int a_;
+  const int b_;
+  int &ra_;
+};
+
+C::C() :
+     a_(12),b_(12),ra_(a_) {}
+
+C x;
+C y(x);// 这里如果使用默认实现，y的ra_指向x的a_
+
+// 手写拷贝构造
+C::C(const C& that) :
+    a_(that.a_), b_(that.b_), ra_(a_) {}
+
+x = y; // error, b_和 ra_无法赋值，引用和const无法赋值
+
+// 下面的代码被否定，会带来很多问题
+// C 是基类， 派生类赋值运算可能调用C的赋值运算，如果析构函数是虚拟的
+// 则它将销毁整个对象，而不是C的部分。
+// 如果析构函数不是虚拟的，则运行行为不确定
+C &C::operator =(const C &that) {
+  if (this != &that) {
+    this->C();
+    new (this) c(that);
+  }
+  return *this;
+}
+// 最后只有一个办法，避免定常和引用数据成员
+```
+
+#### 陷阱82 没有理解定常成员函数的含义
+
+```c++
+class BoundedString {
+  public:
+   explicit BoundedString(int len);
+   size_t length() const; // 函数是定常的，返回值不是定常的，不应该修改len_的值
+   void set(char c);
+   void wipe() const;// 不能修改任意成员变量的值
+   bool operator <(const BoundedString&);// error 尝试用定常对象的地址初始化费定常成员函数的this指针
+  private:
+   char* const buf_; // 指向的字符不是常量
+   int len_;
+   mutable int len2_; // 可以用在非静态，非定常，非引用数据成员，以指出定常成员函数可以安全的修改它
+   size_t maxLen_;
+};
+```
+
+> 1. 对于类X的非定常成员函数而言，this指针的类型是X* const。
+> 2. 对于类X的定常成员函数而言，this指针的类型是const X*。
+
+#### 陷阱83 没有区分聚合与"熟悉"
+
+```c++
+class Employee {
+ public:
+  virtual ~Employee();
+  void setRole(Role* newRole);
+  const Role *getRole() const;
+ private:
+  Role * role_;
+};
+Employee *e1 = getMeAnEmployee();
+Employee *e2 = getMeAnEmployee();
+Role * r = getMeSomethingToDo();
+e1->setRole(r); 
+e2->setRole(r); // bug 删除e1 e2会重复删除r对象
+delete r; // e1 e2包含虚悬指针
+
+// 下面的设计可以解决上面的问题
+class Employee {
+ public:
+  virtual ~Employee();
+  void addRole(Role* newRole);
+  void shareRole(const Role* newRole);
+  void copyRole(const Role* newRole);
+  const Role *getRole() const;
+ private:
+  Role * role_;
+};
+```
+
+#### 陷阱84 不正确的运算符重载
+
+> 1. 不适用运算符重载也可以编程
+> 2. 运算符重载仅仅是语法上的美化，有助于阅读和编写代码
+> 3. 不要设计违背常理的运算符重载逻辑
+> 4. 重载运算符必须得到统一的认识
+> 5. 除非重载运算符很明显的要优于非运算符，否则就不要重载
+
+```c++
+// 可以使用下面的代替运算符重载
+class Complex {
+  public:
+   Complex(double real = 0.0, double imag = 0.0);
+   friend Complex add (const Complex&, const Complex&);// +
+   friend Complex sub (const Complex&, const Complex&);// -
+   friend Complex div (const Complex&, const Complex&);// /
+   friend Complex mul (const Complex&, const Complex&);// *
+};
+```
+
+####陷阱85 优先级和重载
+
+> 1. 运算符的重载不能改变其优先级，如果改变优先级就应该放弃运算符重载
+> 2. 确保重载运算符的优先级满足用户的期望。
+
+```c++
+// 可以使用下面的代替运算符重载
+class Complex {
+  public:
+   Complex(double real = 0.0, double imag = 0.0);
+   friend Complex operator + (const Complex&, const Complex&);// +
+   friend Complex operator * (const Complex&, const Complex&);// -
+   friend Complex operator ^ (const Complex&, const Complex&);// /
+};
+
+// 希望将^修改成幂数运算
+a = -1 + e ^ (i * pi); 
+a = -1 + (e ^ (i * pi)); // 本来的期望
+a = (-1 + e) ^ (i * pi); // 实际结果
+```
+
+#### 陷阱86 友元与成员运算符
+
+> 1. 重载运算符应该允许应用它的参数类型所支持的任何转换。
+
+```c++
+class Complex {
+ public:
+  Complex(double re = 0.0, double im = 0.0)
+};
+
+Complex add(const Complex&, const Complex&);
+Complex c1, c2;
+double d;
+
+add(c1, c2);
+add(c1, d); // add (c1, Complex(d, 0.0))
+add(d, c1); // add ( Complex(d, 0.0), c1)
+
+```
+
+#### 陷阱87 增量和减量运算符
+
+> 1. 前缀返回可修改的左值，使用前缀实现后缀
+> 2. 尽量使用前缀
+
+#### 陷阱88 误解模板化的复制操作
+
+> 1. 模板成员函数永远不应该实现复制操作。
+> 2. 再设计任何类时必须考虑到复制操作。
+
+#### 陷阱89 类对象数组
+
+```c++
+void apply(Base array[], int length, void(*f)( B &)) {
+  for (int i = 0; i < length; ++i) {
+    f(array[i]);
+  }
+}
+
+D* dp = new D[3];
+apply（dp, 3, somefun);// 子类不适用，偏移大小不同，代码有严重问题
+
+// 对上面问题的改进
+
+void apply(Base * array[], int length, void(*f)( B *)) {
+  for (int i = 0; i < length; ++i) {
+    f(array[i]);
+  }
+}
+```
+
+#### 陷阱91 错误的理解受保护的访问
+
+> 1. 如果希望通过派生类来表现基类接口，则可以使用公共继承
+> 2. 私有继承几乎专门用于继承实现。
+> 3. 派生类指针转换为基类指针，说明设计很糟糕，需要重新设计层析结构
+> 4. 派生类可以使用基类受保护的成员函数。
+
+```c++
+class Inst {
+  public:
+   int units() const;
+  private:
+   int units_;
+};
+
+class Sbond : private Inst {
+  //
+};
+
+void doUnits() {
+  Sbind * bp = getNextBond();
+  Inst * ip = (Inst *)bp;
+  bp->unitss(); // error
+  ip->units();// legal
+}
+
+
+```
+
+```c++
+class Inst {
+  public:
+   virtual ~Inst();
+  protected:
+   int units() const;
+  private:
+   int units_;
+};
+class Sbond : private Inst {
+  public:
+   double notional() const {
+     return units() * faceval_;
+   }
+  private:
+   double faceval_;
+};
+
+class Equity : public Inst {
+  public:
+   double notional() const {
+     return units() * shareval_;
+   }
+   bool compare(Bond* bp) const {
+     int bunits = bp->units(); // error! protected只能在友元或继承类访问，可以设置友元解决这个问题
+     return units() < bunits;
+   }
+  private:
+   double shareval_;
+};
+
+```
+
+#### 陷阱92 为代码重用而是用公共继承
+
+> 1. 如果主要是为了在派生类中重用基类的实现而使用公共继承，那么经常会产生不自然的，无法维护的设计
+
+##### Command设计模式
+
+```c++
+// H
+#ifndef _COMMAND_H_
+#define _COMMAND_H_
+
+class Command
+{
+public:
+    virtual ~Command();
+    virtual void Execute()=0;
+protected:
+    Command();
+private:
+};
+
+class Receiver;
+
+class ConcreteCommand : public Command
+{
+public:
+    ConcreteCommand(Receiver* pReceiver);
+    ~ConcreteCommand();
+    virtual void Execute();
+protected:
+private:
+    Receiver* _recv;
+};
+
+class Invoker
+{
+public:
+    Invoker(Command* pCommand);
+    ~Invoker();
+    void Invoke();
+protected:
+private:
+    Command* _cmd;
+};
+
+class Receiver
+{
+public:
+    Receiver();
+    ~Receiver();
+    void Action();
+protected:
+private:
+};
+#endif
+//CPP
+#include "Command.h"
+#include <iostream>
+
+using namespace std;
+
+Command::Command()
+{}
+
+Command::~Command()
+{}
+
+ConcreteCommand::ConcreteCommand(Receiver* pReceiver)
+{
+    this->_recv = pReceiver;
+}
+
+ConcreteCommand::~ConcreteCommand()
+{}
+
+void ConcreteCommand::Execute()
+{
+    this->_recv->Action();
+}
+
+Receiver::Receiver()
+{}
+
+Receiver::~Receiver()
+{}
+
+void Receiver::Action()
+{
+    cout << "Receiver::Action" << endl;
+}
+
+Invoker::Invoker(Command* pCommand)
+{
+    this->_cmd = pCommand;
+}
+
+Invoker::~Invoker()
+{}
+
+void Invoker::Invoke()
+{
+    this->_cmd->Execute();
+}
+
+//Main
+#include "Command.h"
+
+int main()
+{
+    //创建具体命令对象pCmd并设定它的接收者pRev
+    Receiver* pRev = new Receiver();
+    Command* pCmd = new ConcreteCommand(pRev);
+    //请求绑定命令
+    Invoker* pInv = new Invoker(pCmd);
+    pInv->Invoke();
+
+    return 0;
+}
+```
+
+#####Composite设计模式
+
+```c++
+// H
+#ifndef _COMPOSITE_H_
+#define _COMPOSITE_H_
+
+#include <vector>
+
+using namespace std;
+
+/*
+Component抽象基类，为组合中的对象声明接口,声明了类共有接口的缺省行为(如这里的Add,Remove,GetChild函数),
+声明一个接口函数可以访问Component的子组件.
+*/
+class Component
+{
+public:
+    //纯虚函数，只提供接口，没有默认的实现
+    virtual void Operation()=0;    
+
+    // 虚函数,提供接口,有默认的实现就是什么都不做
+    virtual void Add(Component*);
+    virtual void Remove(Component*);
+    virtual Component* GetChild(int index);
+    virtual ~Component();
+protected:
+    Component();
+};
+
+//Leaf是叶子结点,也就是不含有子组件的结点类，所以不用实现Add、Remove、GetChild等方法
+class Leaf:public Component
+{
+public:
+    //只实现Operation接口
+    virtual void Operation();            
+    Leaf();
+    ~Leaf();
+};
+
+//Composite：含有子组件的类
+class Composite:public Component
+{
+public:
+    Composite();
+    ~Composite();
+    //实现所有接口
+    void Operation();
+    void Add(Component*);
+    void Remove(Component*);
+    Component* GetChild(int index);
+private:
+    //这里采用vector来保存子组件
+    vector<Component*> m_ComVec;        
+};
+#endif
+//CPP
+#include "Composite.h"
+#include <iostream>
+
+using namespace std;
+
+Component::Component()
+{}
+
+Component::~Component()
+{}
+
+void Component::Add(Component* com)
+{
+    cout << "add" << endl;
+}
+
+void Component::Remove(Component* com)
+{
+}
+
+void Component::Operation()
+{
+    cout << "Component::Operation" << endl;
+}
+
+Component* Component::GetChild(int index)
+{
+    return NULL;
+}
+
+
+Leaf::Leaf()
+{}
+
+Leaf::~Leaf()
+{}
+
+void Leaf::Operation()
+{
+    cout<< "Leaf::Operation" <<endl;
+}
+
+Composite::Composite()
+{
+}
+
+Composite::~Composite()
+{}
+
+void Composite::Add(Component* com)
+{
+    this->m_ComVec.push_back(com);
+}
+
+void Composite::Remove(Component* com)
+{
+    this->m_ComVec.erase(&com);
+}
+
+void Composite::Operation()
+{
+    cout << "Composite::Operation" << endl;
+    vector<Component*>::iterator iter = this->m_ComVec.begin();
+    for(;iter!= this->m_ComVec.end();iter++)
+    {
+        (*iter)->Operation();
+    }
+}
+
+Component* Composite::GetChild(int index)
+{
+    if(index < 0 || index > this->m_ComVec.size())
+    {
+        return NULL;
+    }
+    return this->m_ComVec[index];
+}
+//Main
+#include "Composite.h"
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+    /*
+      不管是叶子Leaf还是Composite对象pRoot、pCom都实现了Operation接口，所以可以一致对待，直接调用Operation()
+      体现了“使得用户对单个对象和组合对象的使用具有一致性。”
+    */
+    Composite* pRoot = new Composite();
+
+    //组合对象添加叶子节点
+    pRoot->Add(new Leaf());
+
+    Leaf* pLeaf1 = new Leaf();
+    Leaf* pLeaf2 = new Leaf();
+
+    //这里的叶子再添加叶子是没有意义的。
+    //由于叶子与组合对象继承了相同的接口，所以语法上是对的，实际上什么也没做(继承自基类Component的Add方法)。
+    //叶子节点只实现了Operation方法，其他Add、Remove、GetChild都继承自基类，没有实际意义。
+    pLeaf1->Add(pLeaf2);
+    pLeaf1->Remove(pLeaf2);
+    //执行叶子Operation操作
+    pLeaf1->Operation();
+
+    //组合对象实现了基类Component的所有接口，所以可以做各种操作(Add、Remove、GetChild、Operation)。
+    Composite* pCom = new Composite();
+    //组合对象添加叶子节点
+    pCom->Add(pLeaf1);
+    //组合对象添加叶子节点
+    pCom->Add(pLeaf2);
+    //执行组合对象Operation操作
+    pCom->Operation();
+
+    //组合对象添加组合对象
+    pRoot->Add(pCom);
+
+    //执行组合对象Operation操作
+    pRoot->Operation();
+
+    //Component* cp = pCom->GetChild(0);
+    //cp->Operation();
+
+    //pCom->Remove(pLeaf1);
+
+    return 0;
+}
+```
+
+##### Decorator模式
+
+```c++
+#include <iostream>
+using namespace std;
+ 
+class Component
+{
+public:
+	virtual void Operation() = 0;
+};
+ 
+class concreteComponent :public Component
+{
+public:
+	void Operation()
+	{
+		cout << "this is a concreteComponent, not a decorator." << endl;
+	}
+};
+ 
+class Decorator :public Component
+{
+public:
+	Decorator(Component *p) : p_Component(p) {}
+	void Operation()
+	{
+		if (p_Component != NULL)
+		{
+			p_Component->Operation();
+		}
+	}
+ 
+private:
+	Component *p_Component;
+};
+ 
+class DecoratorA :public Decorator
+{
+public:
+	DecoratorA(Component *p) : Decorator(p) {}
+	void Operation()
+	{
+		add_status();
+		Decorator::Operation();
+	}
+ 
+	void add_status()
+	{
+		cout << "I am DecoratorA. " << endl;
+	}
+};
+ 
+class DecoratorB :public Decorator
+{
+public:
+	DecoratorB(Component *p) : Decorator(p) {}
+	void Operation()
+	{
+		add_bahavior();
+		Decorator::Operation();
+	}
+ 
+	void add_bahavior()
+	{
+		cout << "I am DecoratorB. " << endl;
+	}
+};
+ 
+int main(int argc, char*argv[])
+{
+	Component* object = new concreteComponent();
+	Decorator *a = new DecoratorA(object);
+	a->Operation();
+	cout << "-----------------------------------------------------" << endl;
+ 
+	Decorator *b = new DecoratorB(object);
+	b->Operation();
+	cout << "------------------------------------------------------" << endl;
+ 
+	Decorator *ab = new DecoratorB(a);
+	ab->Operation();
+}
+```
+
+#### 陷阱93 具体公共基类
+
+> 1. 公共基类不应该是具体的，应该是抽像的
+
+#### 陷阱94 错误的使用退化层次结构
+
+> 1. 再设计最初，要区分基类和独立类
+> 2. 独立类成为基类时一种灾难
+
+#### 陷阱95 滥用继承
+
+> 1. 继承不能超过3层
+> 2. 能用组合尽量用组合代替继承
+
+#### 陷阱96 基于类型的控制编码
+
+> 1. 使用多态代替类型控制编码
+
+##### Proxy模式
+
+```c++
+//H
+#ifndef _PROXY_H_
+#define _PROXY_H_
+
+// 定义了Proxy和ConcreteSubject的公有接口,
+// 这样就可以在任何需要使用到ConcreteSubject的地方都使用Proxy.
+class Subject
+{
+public:
+    virtual ~Subject();
+    virtual void Request()=0;
+protected:
+    Subject();
+};
+
+class ConcreteSubject : public Subject
+{
+public:
+    ConcreteSubject();
+    ~ConcreteSubject();
+    virtual void Request();
+};
+
+//定义代理类
+class Proxy : public Subject
+{
+public:
+    Proxy();
+    ~Proxy();
+    void DoSomething1();
+    virtual void Request();
+    void DoSomething2();
+private:
+    Subject* _subject;
+};
+#endif
+
+//CPP
+#include "Proxy.h"
+#include "iostream"
+
+using namespace std;
+
+Subject::Subject()
+{}
+
+Subject::~Subject()
+{}
+
+ConcreteSubject::ConcreteSubject()
+{}
+
+ConcreteSubject::~ConcreteSubject()
+{}
+
+void ConcreteSubject::Request()
+{
+    cout << "ConcreteSubject::Request" << endl;
+}
+
+Proxy::Proxy() : _subject(NULL)
+{}
+
+Proxy::~Proxy()
+{}
+
+void Proxy::DoSomething1()
+{
+    cout << "Proxy::DoSomething1" << endl;
+}
+
+void Proxy::DoSomething2()
+{
+    cout << "Proxy::DoSomething2" << endl;
+}
+
+void Proxy::Request()
+{
+    if(NULL == this->_subject)
+    {
+        this->_subject = new ConcreteSubject();
+    }
+
+    this->DoSomething1();//表示额外附加的操作
+
+    this->_subject->Request();//代理的实体类操作
+
+    this->DoSomething2();//表示额外附加的操作
+}
+// main
+#include "Proxy.h"
+
+int main()
+{
+    Proxy* proxy = new Proxy();
+    proxy->Request();
+
+    return 0;
+}
+```
+
+#### 陷阱97 “宇宙”层次结构
+
+> 1. 宇宙层次结构是每个类都从根类派生。
+> 2. 体系结构应该尽可能的灵活，这种假设是错误的，体系结构应该是尽可能与问题领域接近，同时保持足够的灵活性，允许将来进行合理的扩展。
+
