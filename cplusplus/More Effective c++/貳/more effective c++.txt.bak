@@ -1,0 +1,7 @@
+1.仔细区别pointer和reference
+2.最好使用C++转型操作符
+3.绝对不要以多态方式处理数组
+4.非必要不提供default constructor
+5.对定制的类型转换函数保持警觉
+6.区别increment/decrement操作符的前置和后置形式
+7.不要重载"&&","||", 或","
