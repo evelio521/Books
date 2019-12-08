@@ -1,0 +1,95 @@
+ITEM47:控制流
+	//从下面的代码中找出控制流的毛病
+	#include <cassert> 
+	#include <iostream>
+	#include <typeinfo>
+	#include <string>
+	using namespace std;
+	
+	//  The following lines come from other header files.
+	//
+	char* itoa( int value, char* workArea, int radix );
+	extern int fileIdCounter;
+	//
+	//  Helpers to automate class invariant checking.
+	//
+	template<class T>
+	inline void AAssert( T& p )
+	{
+	  static int localFileId = ++fileIdCounter;
+	  if( !p.Invariant() )
+	  {
+	    cerr << "Invariant failed: file " << localFileId
+	         << ", " << typeid(p).name()
+	         << " at " << static_cast<void*>(&p) << endl;
+	    assert( false );
+	  }
+	}
+	
+	template<class T>
+	class AInvariant
+	{
+	public:
+	  AInvariant( T& p ) : p_(p) { AAssert( p_ ); }
+	  ~AInvariant()              { AAssert( p_ ); }
+	private:
+	  T& p_;
+	};
+	#define AINVARIANT_GUARD AInvariant<AIType> invariantChecker( *this )
+	
+	//-------------------------------------------------------------
+	template<class T>
+	class Array : private ArrayBase, public Container
+	{
+	  typedef Array AIType;
+	public:
+	  Array( size_t startingSize = 10 )
+	  : Container( startingSize ),
+	    ArrayBase( Container::GetType() ),
+	    used_(0),
+	    size_(startingSize),
+	    buffer_(new T[size_])
+	  {
+	    AINVARIANT_GUARD;
+	  }
+	
+	  void Resize( size_t newSize )
+	  {
+	    AINVARIANT_GUARD;
+	    T* oldBuffer = buffer_;
+	    buffer_ = new T[newSize];
+	    copy( oldBuffer, oldBuffer+min(size_,newSize), buffer_ );
+	    delete[] oldBuffer;
+	    size_ = newSize;
+	  }
+	
+	  string PrintSizes()
+	  {
+	    AINVARIANT_GUARD;
+	    char buf[30];
+	    return string("size = ") + itoa(size_,buf,10) +
+	           ", used = " + itoa(used_,buf,10);
+	  }
+	
+	  bool Invariant()
+	  {
+	    if( used_ > 0.9*size_ ) Resize( 2*size_ );
+	    return used_ <= size_;
+	  }
+	private:
+	  T*     buffer_;
+	  size_t used_, size_;
+	};
+	
+	int f( int& x, int y = x ) { return x += y; }
+	int g( int& x )            { return x /= 2; }
+	
+	int main( int, char*[] )
+	{
+	  int i = 42;
+	  cout << "f(" << i << ") = " << f(i) << ", "
+	       << "g(" << i << ") = " << g(i) << endl;
+	  Array<char> a(20);
+	  cout << a.PrintSizes() << endl;
+	}
+
