@@ -7,3 +7,12 @@ database/MongoDB filter=lfs diff=lfs merge=lfs -text
 python3 filter=lfs diff=lfs merge=lfs -text
 python3/Python+Cookbook第三版中文.pdf filter=lfs diff=lfs merge=lfs -text
 python3/Python3Object-Oriented_Programming_3rd_Edition.pdf filter=lfs diff=lfs merge=lfs -text
+python3/Python_3面向对象编程.pdf filter=lfs diff=lfs merge=lfs -text
+python3/Python编程快速上手.pdf filter=lfs diff=lfs merge=lfs -text
+python3/Python编程从入门到实践.pdf filter=lfs diff=lfs merge=lfs -text
+python3/Python数据挖掘入门与实践.pdf filter=lfs diff=lfs merge=lfs -text
+python3/django.pdf filter=lfs diff=lfs merge=lfs -text
+python3/think-python.pdf filter=lfs diff=lfs merge=lfs -text
+python3/Python基础教程.pdf filter=lfs diff=lfs merge=lfs -text
+python3/Python项目案例开发从入门到实战.pdf filter=lfs diff=lfs merge=lfs -text
+python3/精通Django.pdf filter=lfs diff=lfs merge=lfs -text
